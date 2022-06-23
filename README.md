@@ -5,7 +5,8 @@
 
 `ivm` also provides a fairly medium level `Instruction` wrapper, which makes porting your language to `ivm` easier
 than imaginable.
-<br style="margin-top = 15px">
+
+&nbsp;
 
 # Modules
 
