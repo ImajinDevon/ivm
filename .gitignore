@@ -1,5 +1,10 @@
-target/
+# IDE/editor related
 .idea/
 *.iml
+
+# build-related
 Cargo.lock
-output.ivm
+target/
+
+# ivm output files appear, usually due to testing
+*.ivm

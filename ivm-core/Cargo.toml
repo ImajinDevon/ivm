@@ -1,0 +1,9 @@
+[package]
+name = "ivm-core"
+version = "0.1.0-SNAPSHOT"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ivm-common = { path = "../ivm-common" }
