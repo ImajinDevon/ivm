@@ -1,9 +1,12 @@
-![ivm logo](https://repository-images.githubusercontent.com/505921096/e5f2b3f3-8939-4f66-bf8c-3fa326d04a4d)
+<img src="https://repository-images.githubusercontent.com/505921096/e5f2b3f3-8939-4f66-bf8c-3fa326d04a4d" width="200" align="left">
 
+# ivm
 `ivm` is an experimental, well-documented and expansion-ready virtual machine written in Rust.
 
 `ivm` also provides a fairly medium level `Instruction` wrapper, which makes porting your language to `ivm` easier
 than imaginable.
+
+&nbsp;
 
 # Modules
 
