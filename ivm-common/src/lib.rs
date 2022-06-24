@@ -8,10 +8,6 @@ pub mod byte_instruction {
     pub const STATIC_VAR_STORE: u8 = 15;
     pub const STATIC_VAR_LOAD: u8 = 16;
 
-    /// This method is not natively defined in the [super::Instruction] implementation, due
-    /// to potential bytecode formatters having to construct (mock) instructions to bypass
-    /// instructions that take values.
-    ///
     /// # Table of bytes (instructions) and their functionality
     /// ```txt
     /// 5  | invoke
@@ -46,7 +42,7 @@ pub enum Instruction {
     /// Invoke a static function.
     InvokeStatic(u32),
 
-    /// Push bytes to the argument stack.
+    /// Push raw bytes to the stack.
     PushBytes(Vec<u8>),
 
     /// Store the stack into a static variable.

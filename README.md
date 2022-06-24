@@ -1,4 +1,4 @@
-# ivm
+![ivm logo](https://repository-images.githubusercontent.com/505921096/e5f2b3f3-8939-4f66-bf8c-3fa326d04a4d)
 
 `ivm` is an experimental, well-documented and expansion-ready virtual machine written in Rust.
 
@@ -6,6 +6,7 @@
 than imaginable.
 
 # Modules
+
 | Module Name | Version | Since (core version) | Functionality | TODO |
 |:---:|:---:|:---:|:---:|:---:|
 | ivm-core | 0.1.0-SNAPSHOT | 0.1.0-SNAPSHOT | Provides utility methods for dependent crates, no functionality as of version 0.1.0-SNAPSHOT | Add proper CLI |

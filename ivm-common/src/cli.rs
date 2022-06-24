@@ -16,15 +16,15 @@ pub struct LinearProcess<'a> {
 
 impl<'a> LinearProcess<'a> {
     pub fn log<D>(&self, message: D)
-        where
-            D: Display,
+    where
+        D: Display,
     {
         println!("{}@info: {message}", self.process_name);
     }
 
     fn step<D>(&mut self, description: D)
-        where
-            D: Display,
+    where
+        D: Display,
     {
         print!(
             "{} ({}/{}): {description}...",
@@ -34,9 +34,9 @@ impl<'a> LinearProcess<'a> {
     }
 
     pub fn step_task<F, T, D>(&mut self, description: D, f: F) -> T
-        where
-            F: FnOnce() -> T,
-            D: Display,
+    where
+        F: FnOnce() -> T,
+        D: Display,
     {
         self.step(description);
         let t = f();
@@ -45,9 +45,9 @@ impl<'a> LinearProcess<'a> {
     }
 
     pub fn step_result<F, T, E, D>(&mut self, description: &str, f: F) -> Result<T, E>
-        where
-            F: FnOnce() -> Result<T, E>,
-            D: Display,
+    where
+        F: FnOnce() -> Result<T, E>,
+        D: Display,
     {
         self.step(description);
         let result = f();
