@@ -3,18 +3,18 @@ use std::fmt::Display;
 /// A process logger, with linear steps.
 /// # Examples
 /// ```
-/// use ivm_common::cli::LinearProcess;
+/// use ivm_common::cli::LinearLogger;
 ///
-/// let process = LinearProcess::new("my_process", 0);
-/// process.log("Hello, world!");
+/// let logger = LinearLogger::new("my_process", 0);
+/// logger.log("Hello, world!");
 /// ```
-pub struct LinearProcess<'a> {
+pub struct LinearLogger<'a> {
     process_name: &'a str,
     step: usize,
     n_steps: usize,
 }
 
-impl<'a> LinearProcess<'a> {
+impl<'a> LinearLogger<'a> {
     pub fn log<D>(&self, message: D)
     where
         D: Display,

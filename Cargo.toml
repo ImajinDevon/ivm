@@ -4,7 +4,8 @@ members = [
     "ivm-common",
     "ivm-compile",
     "ivm-core",
-    "ivm-vm"
+    "ivm-vm",
+    "iron"
 ]
 
 [profile.release]

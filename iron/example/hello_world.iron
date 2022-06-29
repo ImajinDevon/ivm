@@ -1,0 +1,15 @@
+_start@success:
+    ret i32:0;
+
+_start@error:
+    ret i32:1;
+
+_start:
+    psh "Hello, world!\n";
+
+    emp var;
+    cal var, vm_stdout_write;                 // call: Destination, ToCall
+
+    cmp %gth var, i32:0;                      // compare: Method, LeftOp, RightOp
+    res var, _start@success, _start@error;    // var = { _start@success } else { _start@error }
+    ret %tof;                                 // return: %TopOfStack
