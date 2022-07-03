@@ -1,0 +1,6 @@
+# A comment
+
+_process_start:
+    psh "Hello, world!\n";
+    cal _vm_stdout_write;
+    cal _vm_stdout_flush;
