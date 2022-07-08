@@ -17,18 +17,20 @@ pub mod header_format_doc {
     //!
     //! # Format (pseudo)
     //! ```txt
-    //! /// 4 bytes - big endian u32.
+    //! /// 4 bytes: little endian u32.
     //! /// **required - since CFV 1**
     //! CompileFeatureVersion: [u8; 4],
     //!
-    //! /// Will be mapped to the MemoryPointerLength enum
-    //! /// See [MemoryPointerLength::as_header_byte].
+    //! /// Will be mapped to the MemoryPointerLength enum.
+    //! /// See [MemoryPointerLength::get_byte_identifier].
     //! /// **required - since CFV 1**
-    //! MemoryPointerLength: u8
+    //! MemoryPointerLength: MemoryPointerLength#get_byte_identifier()
     //! ```
 }
 
 /// An enum deciding the amount of bytes required to point to a location in memory.
+/// If the extra memory is not needed, using a smaller MemoryPointerLength can be file size
+/// optimization.
 ///
 /// # Pointing to the max memory index
 /// ```txt
@@ -36,18 +38,39 @@ pub mod header_format_doc {
 /// X64b => [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
 /// ```
 pub enum MemoryPointerLength {
-    /// 32 bit memory pointers.
-    /// 4 bytes ([u32]).
-    /// See [std::mem::size_of()].
+    /// 32 bit memory pointers - (4 bytes).
     X32b,
 
-    /// 64 bit memory pointers.
-    /// 8 bytes ([u64]).
-    /// See [std::mem::size_of()].
+    /// 64 bit memory pointers - (8 bytes).
     X64b,
 }
 
 impl MemoryPointerLength {
+    /// Extract a usize from the memory pool at the given start index, until this
+    /// MemoryPointerLength's [span](Self::get_span()) is satisfied.
+    ///
+    /// See [Self::get_span()], [Self::to_usize(&\[u8\])].
+    pub fn extract(&self, index: usize, pool: &[u8]) -> usize {
+        self.to_usize(&pool[index..][..self.get_span()])
+    }
+
+    /// Convert the given input to a usize.
+    ///
+    /// Panics if this length cannot be fit into a usize.
+    pub fn to_usize(&self, input: &[u8]) -> usize {
+        debug_assert_eq!(self.get_span(), input.len());
+
+        match self {
+            Self::X32b => u32::from_le_bytes(input.try_into().unwrap()) as usize,
+            Self::X64b => u64::from_le_bytes(input.try_into().unwrap()) as usize,
+        }
+    }
+
+    /// Convert a memory pointer index to its little-endian byte representation.
+    pub fn fit(&self, mem_ptr_index: usize) -> Vec<u8> {
+        mem_ptr_index.to_le_bytes()[..self.get_span()].to_vec()
+    }
+
     /// Get the byte size of this memory size.
     ///
     /// `X32b => 4 bytes, X64b => 8 bytes.`
@@ -58,9 +81,11 @@ impl MemoryPointerLength {
         }
     }
 
-    /// Get the representation of this memory size as a byte.
+    /// Get the this memory pointer length's byte identifier.
     /// This will be placed into the bytecode header.
-    pub fn as_byte_repr(&self) -> u8 {
+    ///
+    /// See [options::header_format_doc] for a full guide regarding the ivm bytecode format.
+    pub fn get_byte_identifier(&self) -> u8 {
         match self {
             Self::X32b => 0,
             Self::X64b => 1,
@@ -69,8 +94,8 @@ impl MemoryPointerLength {
 
     /// Match the memory pointer length from the given byte.
     ///
-    /// See [MemoryPointerLength::as_byte_repr()].
-    pub fn from_byte_repr(byte: u8) -> Option<Self> {
+    /// See [MemoryPointerLength::get_byte_identifier()].
+    pub fn from_byte_identifier(byte: u8) -> Option<Self> {
         match byte {
             0 => Some(Self::X32b),
             1 => Some(Self::X64b),
@@ -84,24 +109,20 @@ impl MemoryPointerLength {
 ///
 /// See [ProgramOptions::write_bytecode()].
 pub struct ProgramOptions {
-    cfv: u32,
-    memory_size: MemoryPointerLength,
+    pub cfv: u32,
+    pub ptr_len: MemoryPointerLength,
 }
 
 impl ProgramOptions {
-    /// Get the compile feature version these program options are based on.
-    pub fn get_cfv(&self) -> u32 {
-        self.cfv
-    }
-
     /// Write these options as a bytecode header into the given [Vec].
     pub fn write_bytecode(&self, output: &mut Vec<u8>) {
-        output.extend(CCFV.to_be_bytes());
-        output.push(self.memory_size.as_byte_repr());
+        output.extend(CCFV.to_le_bytes());
+        output.push(self.ptr_len.get_byte_identifier());
     }
 
-    pub fn new(cfv: u32, memory_size: MemoryPointerLength) -> Self {
-        Self { cfv, memory_size }
+    /// Create a new ProgramOptions.
+    pub fn new(cfv: u32, ptr_len: MemoryPointerLength) -> Self {
+        Self { cfv, ptr_len }
     }
 }
 
@@ -110,7 +131,7 @@ pub enum InvalidHeaderCause {
     /// For example, the header did not specify a CFV, and/or the memory pointer length.
     FormatNotFulfilled,
 
-    /// This value was not recognized.
+    /// The value was not recognized.
     UnrecognizedValue,
 }
 
@@ -148,65 +169,11 @@ impl InvalidHeaderError {
         &self.message
     }
 
-    fn from(cause: InvalidHeaderCause, message: &str) -> Self {
-        Self {
-            cause,
-            message: message.to_string(),
-        }
-    }
-}
-
-pub mod version_adapters {
-    //! A module containing adapters for differing compile feature versions.
-    //!
-    //! Be sure to read on [super::header_format_doc] to fully understand the bytecode format.
-
-    use crate::options::{
-        InvalidHeaderCause, InvalidHeaderError, MemoryPointerLength, ProgramOptions,
-    };
-
-    /// The header length of the current compile feature version.
-    /// See [super::CCFV].
-    pub const CCFV_HEADER_LEN: u32 = 5;
-
-    /// Get the header size of this compile feature version.
-    /// Returns `None` if the compile feature version is not recognized.
-    pub fn get_header_size(compile_feature_version: u32) -> Option<u32> {
-        match compile_feature_version {
-            super::CCFV => Some(CCFV_HEADER_LEN),
-            _ => None,
-        }
+    pub fn new(cause: InvalidHeaderCause, message: String) -> Self {
+        Self { cause, message }
     }
 
-    /// This function will always support backwards compatibility, but forward compatibility is not
-    /// guarenteed.
-    ///
-    /// Be sure to read on [super::header_format_doc] to fully understand the bytecode format.
-    ///
-    /// Returns a tuple containing the [ProgramOptions] and the length in bytes of the header
-    /// that was read.
-    pub fn get_program_options(
-        bytes: &[u8],
-    ) -> Result<(ProgramOptions, usize), InvalidHeaderError> {
-        if bytes.len() < 5 {
-            return Err(InvalidHeaderError::from(
-                InvalidHeaderCause::FormatNotFulfilled,
-                "header input too short",
-            ));
-        }
-
-        // irrelevant as of CFV 1
-        let cfv = u32::from_be_bytes(bytes[..4].try_into().unwrap());
-
-        let mem_ptr_len = match MemoryPointerLength::from_byte_repr(bytes[4]) {
-            Some(mpl) => mpl,
-            None => {
-                return Err(InvalidHeaderError::from(
-                    InvalidHeaderCause::UnrecognizedValue,
-                    "unrecognized memory pointer length",
-                ));
-            }
-        };
-        Ok((ProgramOptions::new(cfv, mem_ptr_len), 5))
+    pub fn from(cause: InvalidHeaderCause, message: &str) -> Self {
+        Self::new(cause, message.to_string())
     }
 }
