@@ -21,10 +21,11 @@ pub fn get_header_size(compile_feature_version: u32) -> Option<u32> {
 /// This function will always support backwards compatibility, but forward compatibility is not
 /// guaranteed.
 ///
-/// Be sure to read on [crate::options::header_format_doc] to fully understand the bytecode format.
-///
 /// Returns a tuple containing the [ProgramOptions] and the length in bytes of the header
 /// that was read.
+///
+/// See the [crate::options::header_format_doc] module for full documentation regarding the official
+/// bytecode header.
 pub fn get_program_options(bytes: &[u8]) -> Result<(ProgramOptions, usize), InvalidHeaderError> {
     if bytes.len() < 5 {
         return Err(InvalidHeaderError::from(

@@ -1,34 +1,41 @@
+use std::time::Instant;
+
 use ivm_compile::options::{MemoryPointerLength, ProgramOptions};
 use ivm_compile::{options, Instruction, ReadOperation};
 use ivm_vm::{ivm_ext_x32, VmInstance};
-use std::time::Instant;
 
-fn hello_world_instructions() -> [Instruction; 3] {
-    [
-        Instruction::Push(ReadOperation::Local(b"Hello, world!\n".to_vec())),
-        Instruction::ExternCall(ivm_ext_x32::STDOUT_WRITE),
-        Instruction::ExternCall(ivm_ext_x32::STDOUT_FLUSH),
-    ]
-}
-
-fn create_helloworld_vm() -> VmInstance {
+fn vm_ivm_ext_x32<I>(instructions: I) -> VmInstance
+where
+    I: IntoIterator<Item = Instruction>,
+{
+    let instructions = instructions.into_iter().collect::<Vec<_>>();
     let program_options = ProgramOptions::new(options::CCFV, MemoryPointerLength::X32b);
 
-    let bytecode = ivm_compile::compile_all(&program_options, hello_world_instructions());
+    //crate::fmt::print_instructions(&program_options, &instructions, true);
 
-    let mut vm = VmInstance::init(program_options);
+    let bytecode = ivm_compile::compile_all(&program_options, instructions);
+
+    let mut vm = VmInstance::with_ivm_ext_x32(program_options);
     vm.introduce(bytecode);
     vm
 }
 
-fn hello_world() -> Result<(), String> {
-    let mut vm = create_helloworld_vm();
-    vm.continue_execution()
-}
-
 #[test]
 fn bad_helloworld_benchmark_no_warmup() {
-    let now = Instant::now();
-    hello_world().expect("an error occurred");
-    println!("{:?}", now.elapsed());
+    let mut vm = vm_ivm_ext_x32([
+        Instruction::Push(ReadOperation::Local(b"Hello, world!\n".to_vec())),
+        Instruction::ExternCall(ivm_ext_x32::EXTC_STDOUT_WRITE),
+        Instruction::ExternCall(ivm_ext_x32::EXTC_STDOUT_FLUSH),
+    ]);
+
+    let start = Instant::now();
+    vm.continue_execution();
+    println!("finished in: {:?}", start.elapsed());
 }
+
+/*#[test]
+fn loop_forever() {
+    let instructions = [Instruction::Jump(0)];
+    let mut vm = vm_ivm_ext_x32(instructions);
+    vm.continue_execution();
+}*/

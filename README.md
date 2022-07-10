@@ -7,10 +7,14 @@
 `ivm` also provides a fairly medium level `Instruction` wrapper, which makes porting your language to `ivm` easier
 than imaginable.
 
+# Is it production ready?
+No. As of core version 0.1.1-SNAPSHOT, ivm is still rapidly refactoring and changing its infrastructure.
+ivm may not currently include enough operations for advanced software.
+
 # Modules
 
-| Module Name |    Version     | Since (core version) |                    Functionality                     |                        TODO                        |
-|:---:|:--------------:|:--------------------:|:----------------------------------------------------:|:--------------------------------------------------:|
-| ivm-core | 0.1.1-SNAPSHOT |        always        |    Will provide a CLI for executing ivm binaries     |                      Add CLI                       |
-| ivm-vm |     0.1.1      |        always        | The virtual machine for executing ivm instructions.  | Look into possible optimizations and code cleanup. |
-| ivm-compile |     0.1.0      |        always        |                  The ivm compiler.                   |                        n/a                         |
+| Module Name |    Version     | Since (core version) |                    Functionality                    |                        TODO                        |
+|:-----------:|:--------------:|:--------------------:|:---------------------------------------------------:|:--------------------------------------------------:|
+|  ivm-core   | 0.1.1-SNAPSHOT |        always        |    Will provide a CLI for executing ivm binaries    |                      Add CLI                       |
+|   ivm-vm    |     0.1.1      |        always        | The virtual machine for executing ivm instructions. | Look into possible optimizations and code cleanup. |
+| ivm-compile |     0.1.0      |        always        |                  The ivm compiler.                  |                        n/a                         |

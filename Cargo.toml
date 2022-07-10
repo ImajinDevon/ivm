@@ -6,6 +6,10 @@ members = [
     "ivm-vm",
 ]
 
+exclude = [
+    "examples/print-script"
+]
+
 [profile.release]
 codegen-units = 1
 opt-level = 3

@@ -5,7 +5,6 @@ use crate::ivm_ext_x32::IvmX32ExternMap;
 
 pub mod ivm_ext_x32;
 
-// Wrapper for now.
 pub struct StackElement {
     pub bytes: Vec<u8>,
 }
@@ -17,8 +16,11 @@ impl StackElement {
 }
 
 pub trait ExternMap {
-    fn handle(&mut self, call_id: usize, stack: &mut Vec<StackElement>) -> Result<(), String>;
+    fn handle(&mut self, call_id: usize, mem_pool: &mut Vec<u8>, stack: &mut Vec<StackElement>);
 }
+
+#[cfg(test)]
+pub struct EmptyExternMap;
 
 pub struct VmInstance {
     pub options: ProgramOptions,
@@ -26,6 +28,7 @@ pub struct VmInstance {
     pub execution_index: usize,
     pub extern_map: Box<dyn ExternMap>,
     pub stack: Vec<StackElement>,
+    pub call_stack: Vec<usize>,
 }
 
 impl VmInstance {
@@ -39,89 +42,108 @@ impl VmInstance {
 
     /// Returns a tuple containing the read bytes, and how many bytes were traversed.
     fn handle_read_op(&self, mut index: usize) -> (Vec<u8>, usize) {
+        let span = self.options.ptr_len.get_span();
         let identifier = self.mem_pool[index];
+
         index += 1;
 
-        let arg = self.options.ptr_len.extract(index, &self.mem_pool);
-        index += self.options.ptr_len.get_span();
+        let read_size = self._extract_ptr(index);
+        let mut skip = 1 + read_size;
 
-        match identifier {
+        let location = match identifier {
             byte_id::RDOP_LOCAL => {
-                // `arg` is the size of the read operation.
-
-                let data = &self.mem_pool[index..][..arg];
-                (data.to_vec(), 1 + self.options.ptr_len.get_span() + arg)
+                skip += span;
+                index + span
             }
 
             byte_id::RDOP_POINT => {
-                // `arg` is the memory pointer index of the data we are pointing to.
-
-                let rd_size = self.options.ptr_len.extract(arg, &self.mem_pool);
-                let data = &self.mem_pool[arg..][..rd_size];
-
-                (data.to_vec(), 1 + self.options.ptr_len.get_span())
+                skip += span << 1;
+                self._extract_ptr(index)
             }
+
             _ => panic!("unrecognized read operation '{identifier:02x}'"),
-        }
+        };
+
+        let data = &self.mem_pool[location..][..read_size];
+        (data.to_vec(), skip)
     }
 
-    pub fn continue_execution(&mut self) -> Result<(), String> {
+    /// Extract a pointer at the given index.
+    fn _extract_ptr(&self, index: usize) -> usize {
+        self.options.ptr_len.extract(index, &self.mem_pool)
+    }
+
+    /// Extract a pointer at the current execution index.
+    fn extract_ptr(&self) -> usize {
+        self._extract_ptr(self.execution_index)
+    }
+
+    /// Extract a pointer at the current execution index, then skip the required amount of bytes.
+    ///
+    /// See [ivm_compile::options::MemoryPointerLength::get_span()].
+    fn extract_ptr_skip(&mut self) -> usize {
+        let ptr = self.extract_ptr();
+        self.execution_index += self.options.ptr_len.get_span();
+        ptr
+    }
+
+    /// Starts or resumes execution at the current execution index.
+    pub fn continue_execution(&mut self) {
         while self.execution_index < self.mem_pool.len() {
             let byte_instruction = self.mem_pool[self.execution_index];
+
             self.execution_index += 1;
 
             match byte_instruction {
-                byte_id::I_VISIT => {
-                    self.execution_index = self
-                        .options
-                        .ptr_len
-                        .extract(self.execution_index, &self.mem_pool)
-                }
+                byte_id::I_JUMP => self.execution_index = self.extract_ptr(),
 
                 byte_id::I_MUTATE => {
-                    let dest = self
-                        .options
-                        .ptr_len
-                        .extract(self.execution_index, &self.mem_pool);
-
-                    self.execution_index += self.options.ptr_len.get_span();
+                    let dest = self.extract_ptr_skip();
 
                     let (data, skip) = self.handle_read_op(self.execution_index);
                     self.execution_index += skip;
 
-                    for i in 0..data.len() {
-                        self.mem_pool[dest + i] = data[i];
-                    }
+                    self.mem_pool[dest..(data.len() + dest)].copy_from_slice(&data[..]);
                 }
 
                 byte_id::I_PUSH => {
                     let (data, skip) = self.handle_read_op(self.execution_index);
 
-                    self.stack.push(StackElement::new(data.to_vec()));
+                    self.stack.push(StackElement::new(data));
                     self.execution_index += skip;
                 }
 
                 byte_id::I_EXTERN_CALL => {
-                    let call_id = self
-                        .options
-                        .ptr_len
-                        .extract(self.execution_index, &self.mem_pool);
+                    let ptr = self.extract_ptr_skip();
 
-                    self.extern_map.handle(call_id, &mut self.stack)?;
-                    self.execution_index += self.options.ptr_len.get_span();
+                    self.extern_map
+                        .handle(ptr, &mut self.mem_pool, &mut self.stack)
                 }
 
-                _ => {
-                    return Err(format!(
-                        "unrecognized instruction (hex): {byte_instruction:02x}"
-                    ))
+                byte_id::I_RETURN => match self.call_stack.pop() {
+                    Some(caller) => self.execution_index = caller,
+                    None => return,
+                },
+
+                byte_id::I_CALL => {
+                    let ptr = self.extract_ptr_skip();
+                    self.call_stack.push(self.execution_index);
+                    self.execution_index = ptr;
                 }
+
+                _ => panic!(
+                    "unrecognized instruction (hex): {byte_instruction:02x} at execution index {}",
+                    self.execution_index - 1
+                ),
             }
         }
-        Ok(())
     }
 
-    pub fn from_raw(
+    /// Create a new VmInstance.
+    ///
+    /// If you want to use the `ivm_ext_x32` extern map, use
+    /// [Self::with_ivm_ext_x32(ProgramOptions)].
+    pub fn new(
         program_options: ProgramOptions,
         mem_pool: Vec<u8>,
         ptr_index: usize,
@@ -133,18 +155,23 @@ impl VmInstance {
             execution_index: ptr_index,
             extern_map,
             stack: Vec::new(),
+            call_stack: Vec::new(),
         }
     }
 
-    /// Uses the latest ivm_ext_x32 extern map.
+    /// Create a new VmInstance using the provided program options.
+    /// The *[IvmX32ExternMap]* is used.
     ///
-    /// See [ivm_ext_x32], [IvmX32ExternMap].
-    pub fn init(program_options: ProgramOptions) -> Self {
-        Self::from_raw(
+    /// The VM will allocate enough room to fit the amount of bytes declared at
+    /// [ivm_ext_x32::REGISTER_RESERVED].
+    pub fn with_ivm_ext_x32(program_options: ProgramOptions) -> Self {
+        let initial_mem_pool = vec![0; ivm_ext_x32::REGISTER_RESERVED];
+
+        Self::new(
             program_options,
-            Vec::with_capacity(128),
-            0,
-            Box::new(IvmX32ExternMap),
+            initial_mem_pool,
+            ivm_ext_x32::REGISTER_RESERVED,
+            Box::from(IvmX32ExternMap),
         )
     }
 }

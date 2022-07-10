@@ -1,33 +1,88 @@
+use ivm_compile::options::ProgramOptions;
 use ivm_compile::{Instruction, ReadOperation};
 
 fn format_read_op(read_op: &ReadOperation) -> String {
     match read_op {
-        ReadOperation::Local(bytes) => format!("local({bytes:02x?})"),
-        ReadOperation::Point(index) => format!("point({index})"),
+        ReadOperation::Local(bytes) => format!(
+            "<\x1b[92mlocal\x1b[0m> ({})",
+            bytes
+                .iter()
+                .map(|b| format!("\x1b[94m{b:02x}\x1b[0m"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+
+        ReadOperation::Point(size, index) => {
+            format!("<\x1b[95mpoint\x1b[0m> (size: {size}, index: {index})")
+        }
     }
 }
 
-/// Format the given instructions.
-pub fn format_instructions(instructions: &[Instruction]) -> Vec<String> {
-    let mut result = Vec::new();
+fn fmt_ptr(ptr: usize) -> String {
+    format!("\x1b[91m\x1b[1m{ptr}")
+}
 
-    for (i, instruction) in instructions.iter().enumerate() {
-        result.push(format!(
-            "{}, {:02x}  {}",
-            i,
-            instruction.get_identifier_byte(),
-            match instruction {
-                Instruction::Push(rdop) => format!("push: {}", format_read_op(rdop)),
+fn get_instruction_prefix(instruction: &Instruction) -> String {
+    format!(
+        "\x1b[1m{}\x1b[0m",
+        match instruction {
+            Instruction::Push(_) => "\x1b[91mpush",
+            Instruction::Jump(_) => "\x1b[92mjump",
+            Instruction::Mutate(_, _) => "\x1b[93mmutate",
+            Instruction::Return => "\x1b[34mreturn",
+            Instruction::ExternCall(_) => "\x1b[95mextern_call",
+            Instruction::Call(_) => "\x1b[36mcall",
+        }
+    )
+}
 
-                Instruction::ExternCall(index) => format!("extern call: {index}"),
+fn display_value(instruction: &Instruction) -> String {
+    match instruction {
+        Instruction::Push(rd) => format_read_op(rd),
 
-                Instruction::Visit(index) => format!("visit: {index}"),
+        Instruction::ExternCall(ptr) | Instruction::Jump(ptr) | Instruction::Call(ptr) => {
+            fmt_ptr(*ptr)
+        }
 
-                Instruction::Mutate(index, rdop) => {
-                    format!("mutate({index}) into {}", format_read_op(rdop))
-                }
-            }
-        ));
+        Instruction::Mutate(ptr, rd) => format!("{} -> {}", fmt_ptr(*ptr), format_read_op(rd)),
+
+        _ => unreachable!(),
     }
-    result
+}
+
+/// Format the given instruction.
+pub fn format_instruction(instruction: &Instruction) -> String {
+    let name = get_instruction_prefix(instruction);
+
+    match instruction {
+        Instruction::Return => name,
+        _ => format!("{} {}\x1b[0m", name, display_value(instruction)),
+    }
+}
+
+pub fn print_instructions<'a, I>(
+    program_options: &ProgramOptions,
+    instructions: I,
+    show_bytecode: bool,
+) where
+    I: IntoIterator<Item = &'a Instruction>,
+{
+    for instruction in instructions {
+        println!("{}", format_instruction(instruction));
+
+        let mut temp = Vec::new();
+        instruction.compile(&mut temp, program_options);
+
+        if !show_bytecode {
+            continue;
+        }
+
+        let raw = temp
+            .into_iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        println!("\x1b[30m| bytecode: {raw}\x1b[0m");
+    }
 }

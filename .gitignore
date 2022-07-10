@@ -1,10 +1,11 @@
 # IDE/editor related
 .idea/
+.vscode/
 *.iml
 
 # build-related
 Cargo.lock
 target/
 
-# ivm output files appear, usually due to testing
-*.ivm
+# ivm bytecode files appear, usually due to testing
+*.ivmc

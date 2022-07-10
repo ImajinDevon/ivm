@@ -82,6 +82,7 @@ impl MemoryPointerLength {
     }
 
     /// Get the this memory pointer length's byte identifier.
+    ///
     /// This will be placed into the bytecode header.
     ///
     /// See [options::header_format_doc] for a full guide regarding the ivm bytecode format.
@@ -128,6 +129,7 @@ impl ProgramOptions {
 
 pub enum InvalidHeaderCause {
     /// The header format was not fulfilled.
+    ///
     /// For example, the header did not specify a CFV, and/or the memory pointer length.
     FormatNotFulfilled,
 
