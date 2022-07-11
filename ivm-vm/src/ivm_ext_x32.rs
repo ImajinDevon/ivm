@@ -71,7 +71,7 @@ impl ExternMap for IvmX32ExternMap {
                     .pop()
                     .expect("call to ivm_ext_x32@STDOUT_WRITE with empty stack");
 
-                write_io_err_register(&mut vm.mem_pool, io::stdout().write_all(&element.bytes));
+                write_io_err_register(&mut vm.mem_pool, io::stdout().write_all(&element));
             }
 
             EXTC_STDOUT_FLUSH => write_io_err_register(&mut vm.mem_pool, io::stdout().flush()),

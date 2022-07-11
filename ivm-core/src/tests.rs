@@ -9,7 +9,7 @@ fn vm_ivm_ext_x32<I>(instructions: I) -> VmInstance
 where
     I: IntoIterator<Item = Instruction>,
 {
-    let instructions = instructions.into_iter().collect::<Vec<_>>();
+    //let instructions = instructions.into_iter().collect::<Vec<_>>();
     let program_options = ProgramOptions::new(options::CCFV, MemoryPointerLength::X32b);
 
     //crate::fmt::print_instructions(&program_options, &instructions, true);
@@ -30,7 +30,7 @@ fn bad_helloworld_benchmark_no_warmup() {
     ]);
 
     let mut extern_map = IvmX32ExternMap;
-    let mut env = ExecutionEnvironment::unsecured(&mut extern_map);
+    let mut env = ExecutionEnvironment::new(&mut extern_map);
 
     let start = Instant::now();
     vm.continue_execution(&mut env);

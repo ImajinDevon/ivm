@@ -1,13 +1,15 @@
 [package]
-name = "sus"
+name = "helloworld"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ivm-vm = { path = "../../ivm-vm" }
 ivm-compile = { path = "../../ivm-compile" }
-clap = { version = "3.2.8", features = ["derive"] }
-pest = "2.1.3"
-pest_derive = "2.1.0"
+ivm-vm = { path = "../../ivm-vm" }
+
+[profile.release]
+codegen-units = 1
+opt-level = 3
+strip = true

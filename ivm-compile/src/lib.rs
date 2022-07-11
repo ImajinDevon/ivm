@@ -36,12 +36,12 @@ impl ReadOperation {
 
         match self {
             Self::Local(v) => {
-                dest.extend_from_slice(&program_options.get_ptr_len().fit(v.len()));
+                dest.extend_from_slice(&program_options.ptr_len().fit(v.len()));
                 dest.extend(v);
             }
             Self::Point(len, index) => {
-                dest.extend_from_slice(&program_options.get_ptr_len().fit(*len));
-                dest.extend_from_slice(&program_options.get_ptr_len().fit(*index));
+                dest.extend_from_slice(&program_options.ptr_len().fit(*len));
+                dest.extend_from_slice(&program_options.ptr_len().fit(*index));
             }
         }
     }
@@ -102,13 +102,13 @@ impl Instruction {
 
         match self {
             Self::ExternCall(ptr) | Self::Call(ptr) | Self::Jump(ptr) => {
-                dest.extend(program_options.get_ptr_len().fit(*ptr))
+                dest.extend(program_options.ptr_len().fit(*ptr))
             }
 
             Self::Push(rd) => rd.compile(dest, program_options),
 
             Self::Mutate(ptr_dest, value) => {
-                dest.extend(program_options.get_ptr_len().fit(*ptr_dest));
+                dest.extend(program_options.ptr_len().fit(*ptr_dest));
                 value.compile(dest, program_options);
             }
 

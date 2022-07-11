@@ -122,7 +122,7 @@ impl ProgramOptions {
     }
 
     /// Get the compile feature version that this program was compiled on.
-    pub fn get_cfv(&self) -> u32 {
+    pub fn cfv(&self) -> u32 {
         self.cfv
     }
 
@@ -132,7 +132,7 @@ impl ProgramOptions {
     }
 
     /// Get the [MemoryPointerLength] that this program uses.
-    pub fn get_ptr_len(&self) -> &MemoryPointerLength {
+    pub fn ptr_len(&self) -> &MemoryPointerLength {
         &self.ptr_len
     }
 }

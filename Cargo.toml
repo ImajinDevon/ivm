@@ -7,10 +7,12 @@ members = [
 ]
 
 exclude = [
-    "examples/sus"
+    "examples/sus",
+    "examples/helloworld"
 ]
 
 [profile.release]
 codegen-units = 1
 opt-level = 3
 strip = true
+panic = "abort"
