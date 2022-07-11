@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 
-use crate::{ExternMap, StackElement};
+use crate::{ExternMap, VmInstance};
 
 /// Extern call id `0`.
 ///
@@ -16,6 +16,14 @@ pub const EXTC_STDOUT_WRITE: usize = 0;
 ///
 /// See [io::Stdout::flush()].
 pub const EXTC_STDOUT_FLUSH: usize = 1;
+
+/// Extern call id `2`.
+///
+/// Sets the VM's execution index to the length of the memory pool.\
+/// This will cause the VM to return out of the [crate::VmInstance::continue_execution()] function.
+///
+/// This does not prevent the container of the VM from continuing execution.
+pub const EXTC_JUMP_OVERFLOW: usize = 2;
 
 /// The error register.
 ///
@@ -55,17 +63,20 @@ pub fn write_io_err_register<T>(mem_pool: &mut [u8], result: io::Result<T>) {
 pub struct IvmX32ExternMap;
 
 impl ExternMap for IvmX32ExternMap {
-    fn handle(&mut self, call_id: usize, mem_pool: &mut Vec<u8>, stack: &mut Vec<StackElement>) {
+    fn handle(&mut self, call_id: usize, vm: &mut VmInstance) {
         match call_id {
             EXTC_STDOUT_WRITE => {
-                let element = stack
+                let element = vm
+                    .stack
                     .pop()
                     .expect("call to ivm_ext_x32@STDOUT_WRITE with empty stack");
 
-                write_io_err_register(mem_pool, io::stdout().write_all(&element.bytes));
+                write_io_err_register(&mut vm.mem_pool, io::stdout().write_all(&element.bytes));
             }
 
-            EXTC_STDOUT_FLUSH => write_io_err_register(mem_pool, io::stdout().flush()),
+            EXTC_STDOUT_FLUSH => write_io_err_register(&mut vm.mem_pool, io::stdout().flush()),
+
+            EXTC_JUMP_OVERFLOW => vm.execution_index = vm.mem_pool.len(),
 
             _ => panic!("unrecognized ivm_x32 external '{call_id}'"),
         }

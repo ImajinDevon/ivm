@@ -2,7 +2,8 @@ use std::time::Instant;
 
 use ivm_compile::options::{MemoryPointerLength, ProgramOptions};
 use ivm_compile::{options, Instruction, ReadOperation};
-use ivm_vm::{ivm_ext_x32, VmInstance};
+use ivm_vm::ivm_ext_x32::IvmX32ExternMap;
+use ivm_vm::{ivm_ext_x32, ExecutionEnvironment, VmInstance};
 
 fn vm_ivm_ext_x32<I>(instructions: I) -> VmInstance
 where
@@ -15,7 +16,7 @@ where
 
     let bytecode = ivm_compile::compile_all(&program_options, instructions);
 
-    let mut vm = VmInstance::with_ivm_ext_x32(program_options);
+    let mut vm = VmInstance::reserve_ivm_ext_x32(program_options);
     vm.introduce(bytecode);
     vm
 }
@@ -28,8 +29,11 @@ fn bad_helloworld_benchmark_no_warmup() {
         Instruction::ExternCall(ivm_ext_x32::EXTC_STDOUT_FLUSH),
     ]);
 
+    let mut extern_map = IvmX32ExternMap;
+    let mut env = ExecutionEnvironment::unsecured(&mut extern_map);
+
     let start = Instant::now();
-    vm.continue_execution();
+    vm.continue_execution(&mut env);
     println!("finished in: {:?}", start.elapsed());
 }
 

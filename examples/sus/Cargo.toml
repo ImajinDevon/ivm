@@ -1,10 +1,10 @@
 [package]
-name = "print-script"
+name = "sus"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ivm-compile = { path = "../../ivm-compile" }
 ivm-vm = { path = "../../ivm-vm" }
+ivm-compile = { path = "../../ivm-compile" }

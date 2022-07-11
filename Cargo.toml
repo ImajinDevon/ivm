@@ -7,7 +7,7 @@ members = [
 ]
 
 exclude = [
-    "examples/print-script"
+    "examples/sus"
 ]
 
 [profile.release]

@@ -18,15 +18,10 @@ pub fn get_header_size(compile_feature_version: u32) -> Option<u32> {
     }
 }
 
-/// This function will always support backwards compatibility, but forward compatibility is not
-/// guaranteed.
-///
-/// Returns a tuple containing the [ProgramOptions] and the length in bytes of the header
-/// that was read.
-///
-/// See the [crate::options::header_format_doc] module for full documentation regarding the official
-/// bytecode header.
-pub fn get_program_options(bytes: &[u8]) -> Result<(ProgramOptions, usize), InvalidHeaderError> {
+pub type AdapterResult = Result<(ProgramOptions, usize), InvalidHeaderError>;
+
+/// Try to retrieve program options from compile feature version 1.
+pub fn try_retrieve_cfv1(bytes: &[u8]) -> AdapterResult {
     if bytes.len() < 5 {
         return Err(InvalidHeaderError::from(
             InvalidHeaderCause::FormatNotFulfilled,
@@ -34,7 +29,6 @@ pub fn get_program_options(bytes: &[u8]) -> Result<(ProgramOptions, usize), Inva
         ));
     }
 
-    // irrelevant as of CFV 1
     let cfv = u32::from_le_bytes(bytes[..4].try_into().unwrap());
 
     let mem_ptr_len = match MemoryPointerLength::from_byte_identifier(bytes[4]) {
@@ -47,4 +41,16 @@ pub fn get_program_options(bytes: &[u8]) -> Result<(ProgramOptions, usize), Inva
         }
     };
     Ok((ProgramOptions::new(cfv, mem_ptr_len), 5))
+}
+
+/// This function will always support backwards compatibility, but forward compatibility is not
+/// guaranteed.
+///
+/// Returns a tuple containing the [ProgramOptions] and the length in bytes of the header
+/// that was read.
+///
+/// See the [crate::options::header_format_doc] module for full documentation regarding the official
+/// bytecode header.
+pub fn get_program_options(bytes: &[u8]) -> AdapterResult {
+    try_retrieve_cfv1(bytes)
 }

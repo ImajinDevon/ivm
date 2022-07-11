@@ -1,14 +1,17 @@
-use std::os::windows::raw::HANDLE;
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::os::windows::raw::HANDLE;
 
-type Dword = u32;
+    type Dword = u32;
 
-const STD_OUTPUT_HANDLE: Dword = Dword::MAX - 11;
-const ENABLE_VIRTUAL_TERMINAL_PROCESSING: Dword = 0x0004;
+    pub const STD_OUTPUT_HANDLE: Dword = Dword::MAX - 11;
+    pub const ENABLE_VIRTUAL_TERMINAL_PROCESSING: Dword = 0x0004;
 
-#[cfg(windows)]
-extern "C" {
-    fn SetConsoleMode(handle: HANDLE, dw_mode: Dword) -> bool;
-    fn GetStdHandle(handle: u32) -> HANDLE;
+    #[cfg(target_os = "windows")]
+    extern "C" {
+        pub fn SetConsoleMode(handle: HANDLE, dw_mode: Dword) -> bool;
+        pub fn GetStdHandle(handle: u32) -> HANDLE;
+    }
 }
 
 /// Initialize the Windows ANSI terminal.
@@ -17,8 +20,8 @@ extern "C" {
 #[cfg(target_os = "windows")]
 pub fn init_ansi_terminal() {
     unsafe {
-        let handle = GetStdHandle(STD_OUTPUT_HANDLE);
-        SetConsoleMode(handle, ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+        let handle = windows::GetStdHandle(windows::STD_OUTPUT_HANDLE);
+        windows::SetConsoleMode(handle, windows::ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     }
 }
 

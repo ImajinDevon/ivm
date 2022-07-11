@@ -74,7 +74,7 @@ impl MemoryPointerLength {
     /// Get the byte size of this memory size.
     ///
     /// `X32b => 4 bytes, X64b => 8 bytes.`
-    pub fn get_span(&self) -> usize {
+    pub const fn get_span(&self) -> usize {
         match self {
             Self::X32b => 4,
             Self::X64b => 8,
@@ -86,7 +86,7 @@ impl MemoryPointerLength {
     /// This will be placed into the bytecode header.
     ///
     /// See [options::header_format_doc] for a full guide regarding the ivm bytecode format.
-    pub fn get_byte_identifier(&self) -> u8 {
+    pub const fn get_byte_identifier(&self) -> u8 {
         match self {
             Self::X32b => 0,
             Self::X64b => 1,
@@ -96,7 +96,7 @@ impl MemoryPointerLength {
     /// Match the memory pointer length from the given byte.
     ///
     /// See [MemoryPointerLength::get_byte_identifier()].
-    pub fn from_byte_identifier(byte: u8) -> Option<Self> {
+    pub const fn from_byte_identifier(byte: u8) -> Option<Self> {
         match byte {
             0 => Some(Self::X32b),
             1 => Some(Self::X64b),
@@ -108,22 +108,32 @@ impl MemoryPointerLength {
 /// A struct containing the required options for the VM.
 /// This struct represents an ivmc bytecode header.
 ///
-/// See [ProgramOptions::write_bytecode()].
+/// See [ProgramOptions::write_bytecode(Vec)].
 pub struct ProgramOptions {
-    pub cfv: u32,
-    pub ptr_len: MemoryPointerLength,
+    cfv: u32,
+    ptr_len: MemoryPointerLength,
 }
 
 impl ProgramOptions {
     /// Write these options as a bytecode header into the given [Vec].
     pub fn write_bytecode(&self, output: &mut Vec<u8>) {
-        output.extend(CCFV.to_le_bytes());
+        output.extend(self.cfv.to_le_bytes());
         output.push(self.ptr_len.get_byte_identifier());
+    }
+
+    /// Get the compile feature version that this program was compiled on.
+    pub fn get_cfv(&self) -> u32 {
+        self.cfv
     }
 
     /// Create a new ProgramOptions.
     pub fn new(cfv: u32, ptr_len: MemoryPointerLength) -> Self {
         Self { cfv, ptr_len }
+    }
+
+    /// Get the [MemoryPointerLength] that this program uses.
+    pub fn get_ptr_len(&self) -> &MemoryPointerLength {
+        &self.ptr_len
     }
 }
 
@@ -138,7 +148,7 @@ pub enum InvalidHeaderCause {
 }
 
 impl InvalidHeaderCause {
-    pub fn get_help(&self) -> &[&str] {
+    pub const fn get_help<'a>(&self) -> &'a [&'a str] {
         const DOC_HELP: &str =
             "see [ivm_compile::options::header_format_doc] for documentation on matching the ivmc b\
             ytecode header format";

@@ -1,9 +1,10 @@
 use ivm_compile::byte_id;
 use ivm_compile::options::ProgramOptions;
 
-use crate::ivm_ext_x32::IvmX32ExternMap;
+use crate::security::{OperationRequest, SecurityManager};
 
 pub mod ivm_ext_x32;
+pub mod security;
 
 pub struct StackElement {
     pub bytes: Vec<u8>,
@@ -16,17 +17,100 @@ impl StackElement {
 }
 
 pub trait ExternMap {
-    fn handle(&mut self, call_id: usize, mem_pool: &mut Vec<u8>, stack: &mut Vec<StackElement>);
+    fn handle(&mut self, call_id: usize, vm: &mut VmInstance);
 }
 
-#[cfg(test)]
+pub struct ExecutionEnvironment<'a> {
+    security_manager: Option<SecurityManager>,
+    extern_map: &'a mut dyn ExternMap,
+}
+
+impl<'a> ExecutionEnvironment<'a> {
+    pub fn request_extern_call(&mut self, call_id: usize, vm: &mut VmInstance) {
+        if let Some(sm) = &self.security_manager {
+            if !sm.is_allowed(OperationRequest::ExternCall(call_id)) {
+                return;
+            }
+        }
+        self.extern_map.handle(call_id, vm);
+    }
+
+    /// Create a new ExecutionEnvironment with a present [SecurityManager].
+    pub fn with_security_manager(
+        security_manager: SecurityManager,
+        extern_map: &'a mut dyn ExternMap,
+    ) -> Self {
+        Self::new(Some(security_manager), extern_map)
+    }
+
+    /// Create a new ExecutionEnvironment.
+    pub fn new(
+        security_manager: Option<SecurityManager>,
+        extern_map: &'a mut dyn ExternMap,
+    ) -> Self {
+        Self {
+            security_manager,
+            extern_map,
+        }
+    }
+
+    /// Create a new ExecutionEnvironment without a [SecurityManager].
+    pub fn unsecured(extern_map: &'a mut dyn ExternMap) -> Self {
+        Self::new(None, extern_map)
+    }
+
+    /// Optionally get the contained [SecurityManager].
+    pub fn get_security_manager(&self) -> &Option<SecurityManager> {
+        &self.security_manager
+    }
+
+    /// Get the contained [ExternMap].
+    pub fn get_extern_map(&mut self) -> &mut dyn ExternMap {
+        self.extern_map
+    }
+}
+
 pub struct EmptyExternMap;
 
+impl ExternMap for EmptyExternMap {
+    fn handle(&mut self, call_id: usize, _vm: &mut VmInstance) {
+        panic!(
+            "call ({call_id}) to an EmptyExternMap [ivm-vm/lib.rs @line {}]",
+            line!()
+        );
+    }
+}
+
+/// An instance of the ivm VM.
+///
+/// See the [wiki](https://github.com/imajindevon/ivm/wiki) for a full guide on getting started with
+/// ivm.
+///
+/// # Examples
+/// ```
+/// use ivm_compile::{Instruction, ReadOperation};
+/// use ivm_compile::options::{MemoryPointerLength, ProgramOptions};
+/// use ivm_vm::ivm_ext_x32::IvmX32ExternMap;
+/// use ivm_vm::{ExecutionEnvironment, ivm_ext_x32, VmInstance};
+///
+/// let program_options = ProgramOptions::new(1, MemoryPointerLength::X32b);
+///
+/// let bytecode = ivm_compile::compile_all(&program_options, [
+///     Instruction::Push(ReadOperation::Local(b"Hello, world!".to_vec())),
+///     Instruction::ExternCall(ivm_ext_x32::EXTC_STDOUT_WRITE)
+/// ]);
+///
+/// let mut extern_map = IvmX32ExternMap;
+/// let mut env = ExecutionEnvironment::unsecured(&mut extern_map);
+/// let mut vm = VmInstance::reserve_ivm_ext_x32(program_options);
+///
+/// vm.introduce(bytecode);
+/// vm.continue_execution(&mut env);
+/// ```
 pub struct VmInstance {
     pub options: ProgramOptions,
     pub mem_pool: Vec<u8>,
     pub execution_index: usize,
-    pub extern_map: Box<dyn ExternMap>,
     pub stack: Vec<StackElement>,
     pub call_stack: Vec<usize>,
 }
@@ -42,7 +126,7 @@ impl VmInstance {
 
     /// Returns a tuple containing the read bytes, and how many bytes were traversed.
     fn handle_read_op(&self, mut index: usize) -> (Vec<u8>, usize) {
-        let span = self.options.ptr_len.get_span();
+        let span = self.options.get_ptr_len().get_span();
         let identifier = self.mem_pool[index];
 
         index += 1;
@@ -70,7 +154,7 @@ impl VmInstance {
 
     /// Extract a pointer at the given index.
     fn _extract_ptr(&self, index: usize) -> usize {
-        self.options.ptr_len.extract(index, &self.mem_pool)
+        self.options.get_ptr_len().extract(index, &self.mem_pool)
     }
 
     /// Extract a pointer at the current execution index.
@@ -80,15 +164,39 @@ impl VmInstance {
 
     /// Extract a pointer at the current execution index, then skip the required amount of bytes.
     ///
-    /// See [ivm_compile::options::MemoryPointerLength::get_span()].
+    /// The required amount of bytes is defined in
+    /// [ivm_compile::options::MemoryPointerLength::get_span()], and will vary depending on the
+    /// [ProgramOptions] contained within this VmInstance.
     fn extract_ptr_skip(&mut self) -> usize {
         let ptr = self.extract_ptr();
-        self.execution_index += self.options.ptr_len.get_span();
+        self.execution_index += self.options.get_ptr_len().get_span();
         ptr
     }
 
     /// Starts or resumes execution at the current execution index.
-    pub fn continue_execution(&mut self) {
+    ///
+    /// If the execution index is greater than the length of the memory pool, this function will
+    /// return immediately.
+    ///
+    /// # Examples
+    /// ```
+    /// use ivm_compile::options::{MemoryPointerLength, ProgramOptions};
+    /// use ivm_vm::ivm_ext_x32::IvmX32ExternMap;
+    /// use ivm_vm::{EmptyExternMap, ExecutionEnvironment, VmInstance};
+    ///
+    /// let mut extern_map = IvmX32ExternMap;
+    /// let mut env = ExecutionEnvironment::unsecured(&mut extern_map);
+    ///
+    /// let mut vm = VmInstance::new(
+    ///     ProgramOptions::new(1, MemoryPointerLength::X32b),
+    ///     Vec::new(), // Memory pool of length 0
+    ///     1 // Execution index of 1
+    /// );
+    ///
+    /// // Nothing will be happen.
+    /// vm.continue_execution(&mut env);
+    /// ```
+    pub fn continue_execution(&mut self, env: &mut ExecutionEnvironment) {
         while self.execution_index < self.mem_pool.len() {
             let byte_instruction = self.mem_pool[self.execution_index];
 
@@ -115,9 +223,7 @@ impl VmInstance {
 
                 byte_id::I_EXTERN_CALL => {
                     let ptr = self.extract_ptr_skip();
-
-                    self.extern_map
-                        .handle(ptr, &mut self.mem_pool, &mut self.stack)
+                    env.request_extern_call(ptr, self);
                 }
 
                 byte_id::I_RETURN => match self.call_stack.pop() {
@@ -141,37 +247,29 @@ impl VmInstance {
 
     /// Create a new VmInstance.
     ///
-    /// If you want to use the `ivm_ext_x32` extern map, use
-    /// [Self::with_ivm_ext_x32(ProgramOptions)].
-    pub fn new(
-        program_options: ProgramOptions,
-        mem_pool: Vec<u8>,
-        ptr_index: usize,
-        extern_map: Box<dyn ExternMap>,
-    ) -> Self {
+    /// If you want to use the `ivm_ext_x32` extern map, you may want to use
+    /// [Self::reserve_ivm_ext_x32(ProgramOptions)].
+    pub fn new(program_options: ProgramOptions, mem_pool: Vec<u8>, ptr_index: usize) -> Self {
         Self {
             options: program_options,
             mem_pool,
             execution_index: ptr_index,
-            extern_map,
             stack: Vec::new(),
             call_stack: Vec::new(),
         }
     }
 
     /// Create a new VmInstance using the provided program options.
-    /// The *[IvmX32ExternMap]* is used.
     ///
     /// The VM will allocate enough room to fit the amount of bytes declared at
     /// [ivm_ext_x32::REGISTER_RESERVED].
-    pub fn with_ivm_ext_x32(program_options: ProgramOptions) -> Self {
+    pub fn reserve_ivm_ext_x32(program_options: ProgramOptions) -> Self {
         let initial_mem_pool = vec![0; ivm_ext_x32::REGISTER_RESERVED];
 
         Self::new(
             program_options,
             initial_mem_pool,
             ivm_ext_x32::REGISTER_RESERVED,
-            Box::from(IvmX32ExternMap),
         )
     }
 }
