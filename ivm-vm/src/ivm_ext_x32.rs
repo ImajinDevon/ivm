@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 
-use crate::{ExternMap, VmInstance};
+use crate::{ExecutionContext, ExternMap, VmInstance};
 
 /// Extern call id `0`.
 ///
@@ -38,23 +38,37 @@ pub const REG_ERROR: usize = 0;
 pub const REGISTER_RESERVED: usize = 4;
 
 /// Copy the data into the memory pool at the given register index.
+#[inline]
 pub fn write_register(reg_index: usize, data: &[u8], mem_pool: &mut [u8]) {
-    mem_pool[reg_index..(data.len() + reg_index)].copy_from_slice(data);
+    mem_pool[reg_index..(data.len() + reg_index)].copy_from_slice(data)
 }
 
 /// Match the given result, then write the error code to the [REG_ERROR] register in the given
 /// memory pool.
 ///
 /// If the Result is [Ok], this function writes `0i32`.
-pub fn write_io_err_register<T>(mem_pool: &mut [u8], result: io::Result<T>) {
-    write_register(
-        REG_ERROR,
-        &match result {
-            Ok(_) => 0i32.to_le_bytes().to_vec(),
-            Err(err) => err.raw_os_error().unwrap_or(-1).to_le_bytes().to_vec(),
-        },
-        mem_pool,
-    )
+pub fn write_io_err_register<T>(
+    ctx: &mut ExecutionContext,
+    mem_pool: &mut [u8],
+    result: io::Result<T>,
+) {
+    match result {
+        Ok(_) => {
+            if !ctx.ext_1 {
+                write_register(REG_ERROR, &0i32.to_le_bytes(), mem_pool);
+                ctx.ext_1 = true;
+            }
+        }
+        Err(err) => {
+            ctx.ext_1 = false;
+
+            write_register(
+                REG_ERROR,
+                &err.raw_os_error().unwrap_or(-1).to_le_bytes(),
+                mem_pool,
+            );
+        }
+    }
 }
 
 /// The `ivm_ext_x32` extern map.
@@ -63,18 +77,15 @@ pub fn write_io_err_register<T>(mem_pool: &mut [u8], result: io::Result<T>) {
 pub struct IvmX32ExternMap;
 
 impl ExternMap for IvmX32ExternMap {
-    fn handle(&mut self, call_id: usize, vm: &mut VmInstance) {
+    fn handle(&mut self, ctx: &mut ExecutionContext, call_id: usize, vm: &mut VmInstance) {
         match call_id {
             EXTC_STDOUT_WRITE => {
-                let element = vm
-                    .stack
-                    .pop()
-                    .expect("call to ivm_ext_x32@STDOUT_WRITE with empty stack");
-
-                write_io_err_register(&mut vm.mem_pool, io::stdout().write_all(&element));
+                let data = ctx.ext_a_slice();
+                let res = io::stdout().write_all(data);
+                write_io_err_register(ctx, &mut vm.mem_pool, res);
             }
 
-            EXTC_STDOUT_FLUSH => write_io_err_register(&mut vm.mem_pool, io::stdout().flush()),
+            EXTC_STDOUT_FLUSH => write_io_err_register(ctx, &mut vm.mem_pool, io::stdout().flush()),
 
             EXTC_JUMP_OVERFLOW => vm.execution_index = vm.mem_pool.len(),
 

@@ -1,4 +1,4 @@
-use crate::{ExternMap, VmInstance};
+use crate::{ExecutionContext, ExternMap, VmInstance};
 
 #[derive(Clone)]
 pub enum IllegalOperationHandleMethod {
@@ -47,15 +47,18 @@ impl<'a> GuardedExternMap<'a> {
 }
 
 impl ExternMap for GuardedExternMap<'_> {
-    fn handle(&mut self, call_id: usize, vm: &mut VmInstance) {
+    fn handle(&mut self, ctx: &mut ExecutionContext, call_id: usize, vm: &mut VmInstance) {
         if !self.guards.contains(&call_id) ^ self.inverted {
-            self.inner.handle(call_id, vm);
+            self.inner.handle(ctx, call_id, vm);
             return;
         }
 
         match self.handle_method {
             IllegalOperationHandleMethod::Panic => {
-                panic!("encountered illegal operation (extern call), call id {call_id}")
+                panic!(
+                    "encountered illegal extern call ~ call id {call_id}, @ execution index {}",
+                    vm.execution_index
+                )
             }
             IllegalOperationHandleMethod::SilentFail => (),
         }

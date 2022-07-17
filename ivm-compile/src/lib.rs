@@ -5,7 +5,22 @@ use crate::options::ProgramOptions;
 pub mod byte_id;
 pub mod options;
 pub mod version_adapters;
-pub mod vmenv;
+
+/// A trait marking a type as being able to be compiled to ivm bytecode.
+pub trait Compile {
+    /// Compile this ToBytecode implementation to ivm bytecode, then push it to the given [Vec].
+    ///
+    /// The provided [ProgramOptions] shall be used in the compilation.
+    fn compile_into(&self, dest: &mut Vec<u8>, program_options: &ProgramOptions);
+
+    /// Compile this implementation using the provided [ProgramOptions], then return a [Vec] of the
+    /// final bytecode.
+    fn compile(&self, program_options: &ProgramOptions) -> Vec<u8> {
+        let mut dest = Vec::new();
+        self.compile_into(&mut dest, program_options);
+        dest
+    }
+}
 
 /// When the VM encounters an instruction that requires a value, it will perform a read operation.
 pub enum ReadOperation {
@@ -29,19 +44,22 @@ impl ReadOperation {
             Self::Point(_, _) => byte_id::RDOP_POINT,
         }
     }
+}
 
-    /// Compile this read operation to its bytecode representation.
-    pub fn compile(&self, dest: &mut Vec<u8>, program_options: &ProgramOptions) {
+impl Compile for ReadOperation {
+    fn compile_into(&self, dest: &mut Vec<u8>, program_options: &ProgramOptions) {
+        let ptr_len = program_options.ptr_len();
+
         dest.push(self.get_identifier_byte());
 
         match self {
             Self::Local(v) => {
-                dest.extend_from_slice(&program_options.ptr_len().fit(v.len()));
+                dest.extend_from_slice(&ptr_len.fit(v.len()));
                 dest.extend(v);
             }
             Self::Point(len, index) => {
-                dest.extend_from_slice(&program_options.ptr_len().fit(*len));
-                dest.extend_from_slice(&program_options.ptr_len().fit(*index));
+                dest.extend_from_slice(&ptr_len.fit(*len));
+                dest.extend_from_slice(&ptr_len.fit(*index));
             }
         }
     }
@@ -79,6 +97,12 @@ pub enum Instruction {
     ///
     /// If the call stack is empty, this will halt execution.
     Return,
+
+    /// Read data then load its pointer into ext_a of the execution context.
+    ///
+    /// This is a performance optimization to avoid repeated memory mutations and accesses during
+    /// function calls.
+    LoadA(ReadOperation),
 }
 
 impl Instruction {
@@ -93,11 +117,13 @@ impl Instruction {
             Self::ExternCall(_) => byte_id::I_EXTERN_CALL,
             Self::Return => byte_id::I_RETURN,
             Self::Call(_) => byte_id::I_CALL,
+            Self::LoadA(_) => byte_id::I_LOAD_A,
         }
     }
+}
 
-    /// Compile this instruction to its bytecode representation.
-    pub fn compile(&self, dest: &mut Vec<u8>, program_options: &ProgramOptions) {
+impl Compile for Instruction {
+    fn compile_into(&self, dest: &mut Vec<u8>, program_options: &ProgramOptions) {
         dest.push(self.get_identifier_byte());
 
         match self {
@@ -105,29 +131,25 @@ impl Instruction {
                 dest.extend(program_options.ptr_len().fit(*ptr))
             }
 
-            Self::Push(rd) => rd.compile(dest, program_options),
+            Self::Push(rd) | Self::LoadA(rd) => rd.compile_into(dest, program_options),
 
             Self::Mutate(ptr_dest, value) => {
                 dest.extend(program_options.ptr_len().fit(*ptr_dest));
-                value.compile(dest, program_options);
+                value.compile_into(dest, program_options);
             }
 
-            _ => (),
+            Self::Return => (),
         }
     }
 }
 
-/// Compiles every instruction in the given [IntoIterator], then returns the combined bytecode.
-///
-/// See [Instruction::compile].
-pub fn compile_all<I>(program_options: &ProgramOptions, it: I) -> Vec<u8>
+pub fn compile_all<I, C>(i: I, options: &ProgramOptions) -> Vec<u8>
 where
-    I: IntoIterator<Item = Instruction>,
+    I: IntoIterator<Item = C>,
+    C: Compile,
 {
-    let mut bytecode = Vec::new();
-
-    it.into_iter()
-        .for_each(|i: Instruction| i.compile(&mut bytecode, program_options));
-
-    bytecode
+    let mut res = Vec::new();
+    i.into_iter()
+        .for_each(|i| i.compile_into(&mut res, options));
+    res
 }

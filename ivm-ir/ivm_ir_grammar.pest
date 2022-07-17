@@ -1,0 +1,51 @@
+program = { SOI ~ global* ~ EOI }
+
+arg_collector = { open_paren ~ (expr ~ (comma ~ expr)*)? ~ close_paren }
+
+param_collector = { open_paren ~ ( param ~ (comma ~ param)*)? ~ close_paren }
+param = { value_type ~ identifier }
+
+global = { function | declare_static }
+declare_static = { static_kw ~ value_type ~ identifier ~ equals ~ constant ~ semicolon }
+static_kw = _{ "static" }
+
+function = { fn_identifier ~ identifier ~ param_collector ~ open_curly ~ statement* ~ close_curly }
+fn_identifier = _{ "let" }
+
+function_call = { identifier ~ open_paren ~ expr? ~ close_paren }
+
+expr = { function_call | constant }
+
+constant = { int_value | string }
+
+int_value = @{ int ~ int_type }
+int = { NUMBER+ }
+
+equals = _{ "=" }
+
+quote = _{ QUOTATION_MARK }
+
+
+value_type = { uint_type | int_type | string_type  }
+    uint_type = { "u8" | "u16" | "u32" | "u64" | "u128" }
+    int_type = { "i8" | "i16" | "i32" | "i64" | "i128" }
+    string_type = { "string" }
+
+
+string = { quote ~ ( !quote ~ ANY )* ~ quote }
+
+byte = @{ "b" ~ ( HEX_DIGIT ~ HEX_DIGIT ) | int }
+
+comma = _{ "," }
+
+open_paren = _{ "(" }
+close_paren = _{ ")" }
+
+statement = { function_call ~ semicolon }
+
+semicolon = _{ ";" }
+open_curly = _{ "{" }
+close_curly = _{ "}" }
+
+identifier = { ( ASCII_ALPHANUMERIC | "_" )+ }
+WHITESPACE = _{ " " | "\t" | NEWLINE }

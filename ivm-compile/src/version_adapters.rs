@@ -6,23 +6,48 @@ use crate::options;
 use crate::options::{InvalidHeaderCause, InvalidHeaderError, MemoryPointerLength, ProgramOptions};
 
 /// The header length of the current compile feature version.
+///
 /// See [options::CCFV].
-pub const CCFV_HEADER_LEN: u32 = 5;
+pub const CCFV_HEADER_LEN: usize = CFV1_HEADER_LEN;
 
-/// Get the header size of this compile feature version.
+/// The header length of compile feature version 1.
+///
+/// Constant value `13`.
+pub const CFV1_HEADER_LEN: usize = 13;
+
+pub struct Adapt {
+    pub header_len: usize,
+    pub function_start: u64,
+    pub options: ProgramOptions,
+}
+
+impl Adapt {
+    #[inline]
+    pub const fn new(header_len: usize, function_start: u64, options: ProgramOptions) -> Self {
+        Self {
+            header_len,
+            function_start,
+            options,
+        }
+    }
+}
+
+/// Get the header size of the given compile feature version.
+///
 /// Returns `None` if the compile feature version is not recognized.
-pub fn get_header_size(compile_feature_version: u32) -> Option<u32> {
-    match compile_feature_version {
+#[inline]
+pub fn get_header_size(cfv: u32) -> Option<usize> {
+    match cfv {
         options::CCFV => Some(CCFV_HEADER_LEN),
         _ => None,
     }
 }
 
-pub type AdapterResult = Result<(ProgramOptions, usize), InvalidHeaderError>;
+pub type AdapterResult = Result<Adapt, InvalidHeaderError>;
 
-/// Try to retrieve program options from compile feature version 1.
+/// Try to retrieve an [Adapt] using the bytecode header format defined for CFV 1.
 pub fn try_retrieve_cfv1(bytes: &[u8]) -> AdapterResult {
-    if bytes.len() < 5 {
+    if bytes.len() < CFV1_HEADER_LEN {
         return Err(InvalidHeaderError::from(
             InvalidHeaderCause::FormatNotFulfilled,
             "header input too short",
@@ -40,7 +65,14 @@ pub fn try_retrieve_cfv1(bytes: &[u8]) -> AdapterResult {
             ));
         }
     };
-    Ok((ProgramOptions::new(cfv, mem_ptr_len), 5))
+
+    let execution_start = u64::from_le_bytes(bytes[5..13].try_into().unwrap());
+
+    Ok(Adapt::new(
+        CFV1_HEADER_LEN,
+        execution_start,
+        ProgramOptions::new(cfv, mem_ptr_len),
+    ))
 }
 
 /// This function will always support backwards compatibility, but forward compatibility is not
@@ -51,6 +83,7 @@ pub fn try_retrieve_cfv1(bytes: &[u8]) -> AdapterResult {
 ///
 /// See the [crate::options::header_format_doc] module for full documentation regarding the official
 /// bytecode header.
+#[inline(always)]
 pub fn get_program_options(bytes: &[u8]) -> AdapterResult {
     try_retrieve_cfv1(bytes)
 }

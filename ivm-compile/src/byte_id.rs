@@ -18,6 +18,9 @@ pub const I_RETURN: u8 = 4;
 /// See [crate::Instruction::Call].
 pub const I_CALL: u8 = 5;
 
+/// See [crate::Instruction::LoadA].
+pub const I_LOAD_A: u8 = 6;
+
 /// See [crate::ReadOperation::Local].
 pub const RDOP_LOCAL: u8 = 0;
 

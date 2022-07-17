@@ -1,5 +1,5 @@
 use ivm_compile::options::ProgramOptions;
-use ivm_compile::{Instruction, ReadOperation};
+use ivm_compile::{Compile, Instruction, ReadOperation};
 
 fn format_read_op(read_op: &ReadOperation) -> String {
     match read_op {
@@ -32,13 +32,14 @@ fn get_instruction_prefix(instruction: &Instruction) -> String {
             Instruction::Return => "\x1b[34mreturn",
             Instruction::ExternCall(_) => "\x1b[95mextern_call",
             Instruction::Call(_) => "\x1b[36mcall",
+            Instruction::LoadA(_) => "\x1b[33mload %a%",
         }
     )
 }
 
 fn display_value(instruction: &Instruction) -> String {
     match instruction {
-        Instruction::Push(rd) => format_read_op(rd),
+        Instruction::Push(rd) | Instruction::LoadA(rd) => format_read_op(rd),
 
         Instruction::ExternCall(ptr) | Instruction::Jump(ptr) | Instruction::Call(ptr) => {
             fmt_ptr(*ptr)
@@ -70,8 +71,7 @@ pub fn print_instructions<'a, I>(
     for instruction in instructions {
         println!("{}", format_instruction(instruction));
 
-        let mut temp = Vec::new();
-        instruction.compile(&mut temp, program_options);
+        let temp = instruction.compile(program_options);
 
         if !show_bytecode {
             continue;

@@ -1,3 +1,6 @@
+use crate::Compile;
+use std::fmt::{Display, Formatter};
+
 /// The current compile feature version of this build.
 ///
 /// The compile feature version is incremented whenever a new feature is added to the ivmc compiler,
@@ -17,13 +20,13 @@ pub mod header_format_doc {
     //!
     //! # Format (pseudo)
     //! ```txt
-    //! /// 4 bytes: little endian u32.
-    //! /// **required - since CFV 1**
+    //! // 4 bytes: little endian u32.
+    //! // **required - since CFV 1**
     //! CompileFeatureVersion: [u8; 4],
     //!
-    //! /// Will be mapped to the MemoryPointerLength enum.
-    //! /// See [MemoryPointerLength::get_byte_identifier].
-    //! /// **required - since CFV 1**
+    //! // Will be mapped to the MemoryPointerLength enum.
+    //! // See [MemoryPointerLength::get_byte_identifier].
+    //! // **required - since CFV 1**
     //! MemoryPointerLength: MemoryPointerLength#get_byte_identifier()
     //! ```
 }
@@ -37,6 +40,7 @@ pub mod header_format_doc {
 /// X32b => [0xFF, 0xFF, 0xFF, 0xFF]
 /// X64b => [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
 /// ```
+#[derive(Clone, Debug)]
 pub enum MemoryPointerLength {
     /// 32 bit memory pointers - (4 bytes).
     X32b,
@@ -50,6 +54,7 @@ impl MemoryPointerLength {
     /// MemoryPointerLength's [span](Self::get_span()) is satisfied.
     ///
     /// See [Self::get_span()], [Self::to_usize(&\[u8\])].
+    #[inline]
     pub fn extract(&self, index: usize, pool: &[u8]) -> usize {
         self.to_usize(&pool[index..][..self.get_span()])
     }
@@ -57,6 +62,7 @@ impl MemoryPointerLength {
     /// Convert the given input to a usize.
     ///
     /// Panics if this length cannot be fit into a usize.
+    #[inline]
     pub fn to_usize(&self, input: &[u8]) -> usize {
         debug_assert_eq!(self.get_span(), input.len());
 
@@ -67,6 +73,7 @@ impl MemoryPointerLength {
     }
 
     /// Convert a memory pointer index to its little-endian byte representation.
+    #[inline]
     pub fn fit(&self, mem_ptr_index: usize) -> Vec<u8> {
         mem_ptr_index.to_le_bytes()[..self.get_span()].to_vec()
     }
@@ -74,6 +81,7 @@ impl MemoryPointerLength {
     /// Get the byte size of this memory size.
     ///
     /// `X32b => 4 bytes, X64b => 8 bytes.`
+    #[inline]
     pub const fn get_span(&self) -> usize {
         match self {
             Self::X32b => 4,
@@ -86,6 +94,7 @@ impl MemoryPointerLength {
     /// This will be placed into the bytecode header.
     ///
     /// See [options::header_format_doc] for a full guide regarding the ivm bytecode format.
+    #[inline]
     pub const fn get_byte_identifier(&self) -> u8 {
         match self {
             Self::X32b => 0,
@@ -96,6 +105,7 @@ impl MemoryPointerLength {
     /// Match the memory pointer length from the given byte.
     ///
     /// See [MemoryPointerLength::get_byte_identifier()].
+    #[inline]
     pub const fn from_byte_identifier(byte: u8) -> Option<Self> {
         match byte {
             0 => Some(Self::X32b),
@@ -109,31 +119,48 @@ impl MemoryPointerLength {
 /// This struct represents an ivmc bytecode header.
 ///
 /// See [ProgramOptions::write_bytecode(Vec)].
+#[derive(Clone, Debug)]
 pub struct ProgramOptions {
     cfv: u32,
     ptr_len: MemoryPointerLength,
 }
 
 impl ProgramOptions {
-    /// Write these options as a bytecode header into the given [Vec].
-    pub fn write_bytecode(&self, output: &mut Vec<u8>) {
-        output.extend(self.cfv.to_le_bytes());
-        output.push(self.ptr_len.get_byte_identifier());
-    }
-
     /// Get the compile feature version that this program was compiled on.
-    pub fn cfv(&self) -> u32 {
+    ///
+    /// See the [current compile feature version](CCFV).
+    #[inline]
+    pub const fn cfv(&self) -> u32 {
         self.cfv
     }
 
     /// Create a new ProgramOptions.
-    pub fn new(cfv: u32, ptr_len: MemoryPointerLength) -> Self {
+    ///
+    /// The [Default] implementation for this struct uses the
+    /// [current compile feature version](CCFV) and a
+    /// [32 bit memory pointer length](MemoryPointerLength::X32b).
+    #[inline]
+    pub const fn new(cfv: u32, ptr_len: MemoryPointerLength) -> Self {
         Self { cfv, ptr_len }
     }
 
     /// Get the [MemoryPointerLength] that this program uses.
-    pub fn ptr_len(&self) -> &MemoryPointerLength {
+    #[inline]
+    pub const fn ptr_len(&self) -> &MemoryPointerLength {
         &self.ptr_len
+    }
+}
+
+impl Compile for ProgramOptions {
+    fn compile_into(&self, dest: &mut Vec<u8>, _program_options: &ProgramOptions) {
+        dest.extend(self.cfv.to_le_bytes());
+        dest.push(self.ptr_len.get_byte_identifier());
+    }
+}
+
+impl Default for ProgramOptions {
+    fn default() -> Self {
+        Self::new(CCFV, MemoryPointerLength::X32b)
     }
 }
 
@@ -144,14 +171,16 @@ pub enum InvalidHeaderCause {
     FormatNotFulfilled,
 
     /// The value was not recognized.
+    ///
+    /// For example, a CFV is too large.
     UnrecognizedValue,
 }
 
 impl InvalidHeaderCause {
+    #[inline]
     pub const fn get_help<'a>(&self) -> &'a [&'a str] {
         const DOC_HELP: &str =
-            "see [ivm_compile::options::header_format_doc] for documentation on matching the ivmc b\
-            ytecode header format";
+            "see [ivm_compile::options::header_format_doc] for the ivm bytecode format";
 
         match self {
             Self::FormatNotFulfilled => &[DOC_HELP],
@@ -160,6 +189,19 @@ impl InvalidHeaderCause {
                 DOC_HELP,
             ],
         }
+    }
+}
+
+impl Display for InvalidHeaderCause {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::UnrecognizedValue => "an unrecognized value was encountered",
+                Self::FormatNotFulfilled => "the header format was not fulfilled",
+            }
+        )
     }
 }
 
@@ -172,20 +214,30 @@ pub struct InvalidHeaderError {
 
 impl InvalidHeaderError {
     /// Get the cause of this error.
-    pub fn get_cause(&self) -> &InvalidHeaderCause {
+    #[inline]
+    pub const fn cause(&self) -> &InvalidHeaderCause {
         &self.cause
     }
 
     /// Get the message of this error.
-    pub fn get_message(&self) -> &String {
+    #[inline]
+    pub const fn message(&self) -> &String {
         &self.message
     }
 
-    pub fn new(cause: InvalidHeaderCause, message: String) -> Self {
+    #[inline]
+    pub const fn new(cause: InvalidHeaderCause, message: String) -> Self {
         Self { cause, message }
     }
 
+    #[inline]
     pub fn from(cause: InvalidHeaderCause, message: &str) -> Self {
         Self::new(cause, message.to_string())
+    }
+}
+
+impl Display for InvalidHeaderError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.cause, self.message)
     }
 }

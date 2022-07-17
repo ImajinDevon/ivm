@@ -4,6 +4,7 @@ members = [
     "ivm-compile",
     "ivm-core",
     "ivm-vm",
+    "ivm-ir"
 ]
 
 exclude = [
@@ -16,3 +17,4 @@ codegen-units = 1
 opt-level = 3
 strip = true
 panic = "abort"
+lto = "fat"
